@@ -1,0 +1,16 @@
+g:\network-testing\addons\arcane-networking\plugin\weaver\weaver.exe
+G:\network-testing\addons\arcane-networking\plugin\weaver\weaver.deps.json
+G:\network-testing\addons\arcane-networking\plugin\weaver\weaver.runtimeconfig.json
+g:\network-testing\addons\arcane-networking\plugin\weaver\weaver.dll
+g:\network-testing\addons\arcane-networking\plugin\weaver\weaver.pdb
+g:\weaver\obj\Debug\weaver.csproj.AssemblyReference.cache
+g:\weaver\obj\Debug\weaver.GeneratedMSBuildEditorConfig.editorconfig
+g:\weaver\obj\Debug\weaver.AssemblyInfoInputs.cache
+g:\weaver\obj\Debug\weaver.AssemblyInfo.cs
+g:\weaver\obj\Debug\weaver.csproj.CoreCompileInputs.cache
+G:\weaver\obj\Debug\weaver.csproj.Up2Date
+g:\weaver\obj\Debug\weaver.dll
+g:\weaver\obj\Debug\refint\weaver.dll
+g:\weaver\obj\Debug\weaver.pdb
+G:\weaver\obj\Debug\weaver.genruntimeconfig.cache
+G:\weaver\obj\Debug\ref\weaver.dll
