@@ -187,26 +187,32 @@ public static class Weaver
         var il = rpc.Body.GetILProcessor();
         var first = rpc.Body.Instructions.First();
 
+
         // Define (if) branch targets (Check if param 1 is null, uint[])
-        var skipBlock = il.Create(OpCodes.Nop);
+        var skip = il.Create(OpCodes.Nop);
 
         // Define condition
         il.InsertBefore(first, il.Create(OpCodes.Ldarg_1)); // connectionsToSendTo[]
         il.InsertBefore(first, il.Create(OpCodes.Ldnull));
         il.InsertBefore(first, il.Create(OpCodes.Ceq)); // Check equal, 1 if equal
-        il.InsertBefore(first, il.Create(OpCodes.Brtrue, skipBlock)); // Check if it is null, if true, skip!
+        il.InsertBefore(first, il.Create(OpCodes.Brtrue, skip)); // Check if it is null, if true, skip!
 
         il.InsertBefore(first, il.Create(OpCodes.Ldarg_0)); // This (Networked Component)
 
-        for (int i = 1; i < rpc.Parameters.Count + 1; i++)
+        for (int i = 1; i < rpc.Parameters.Count + 1; i++) // Load args from this method, original rpc method had one less paramter, so we can safely do Count + 1
             il.InsertBefore(first, il.Create(OpCodes.Ldarg, i));
 
-        il.InsertBefore(first, il.Create(OpCodes.Callvirt, packMethod));
+        il.InsertBefore(first, il.Create(OpCodes.Callvirt, packMethod)); // Call the pack method
 
-        if (isServerCommand) il.InsertBefore(first, il.Create(OpCodes.Ret));
-
+        // If its a server command, return after the pack
+        if (isServerCommand)
+        {
+            il.InsertBefore(first, il.Create(OpCodes.Ret));
+        }
         // End of (if)
-        il.InsertBefore(first, skipBlock);
+        il.InsertBefore(first, skip);
+ 
+  
 
     }
 

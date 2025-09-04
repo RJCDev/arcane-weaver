@@ -1,10 +1,14 @@
 {
   "version": 2,
-  "dgSpecHash": "x2cAqo7VsoY=",
+  "dgSpecHash": "DNcujfndCKc=",
   "success": true,
-  "projectFilePath": "G:\\weaver\\weaver.csproj",
+  "projectFilePath": "D:\\arcane-weaver\\weaver.csproj",
   "expectedPackageFiles": [
-    "C:\\Users\\Ryan SSD\\.nuget\\packages\\mono.cecil\\0.11.6\\mono.cecil.0.11.6.nupkg.sha512"
+    "C:\\Users\\Owner\\.nuget\\packages\\mono.cecil\\0.11.6\\mono.cecil.0.11.6.nupkg.sha512",
+    "C:\\Users\\Owner\\.nuget\\packages\\microsoft.netcore.app.ref\\8.0.19\\microsoft.netcore.app.ref.8.0.19.nupkg.sha512",
+    "C:\\Users\\Owner\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\8.0.19\\microsoft.windowsdesktop.app.ref.8.0.19.nupkg.sha512",
+    "C:\\Users\\Owner\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\8.0.19\\microsoft.aspnetcore.app.ref.8.0.19.nupkg.sha512",
+    "C:\\Users\\Owner\\.nuget\\packages\\microsoft.netcore.app.host.win-x64\\8.0.19\\microsoft.netcore.app.host.win-x64.8.0.19.nupkg.sha512"
   ],
   "logs": []
 }
