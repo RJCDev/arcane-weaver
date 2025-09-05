@@ -31,3 +31,20 @@ d:\arcane-weaver\obj\Debug\refint\weaver.dll
 d:\arcane-weaver\obj\Debug\weaver.pdb
 D:\arcane-weaver\obj\Debug\weaver.genruntimeconfig.cache
 D:\arcane-weaver\obj\Debug\ref\weaver.dll
+d:\Desktop\Coding Projects\Networking\network-testing\addons\arcane-networking\plugin\weaver\weaver.exe
+D:\Desktop\Coding Projects\Networking\network-testing\addons\arcane-networking\plugin\weaver\weaver.deps.json
+D:\Desktop\Coding Projects\Networking\network-testing\addons\arcane-networking\plugin\weaver\weaver.runtimeconfig.json
+d:\Desktop\Coding Projects\Networking\network-testing\addons\arcane-networking\plugin\weaver\weaver.dll
+d:\Desktop\Coding Projects\Networking\network-testing\addons\arcane-networking\plugin\weaver\weaver.pdb
+d:\Desktop\Coding Projects\Networking\arcane-weaver\obj\Debug\weaver.csproj.AssemblyReference.cache
+d:\Desktop\Coding Projects\Networking\arcane-weaver\obj\Debug\weaver.GeneratedMSBuildEditorConfig.editorconfig
+d:\Desktop\Coding Projects\Networking\arcane-weaver\obj\Debug\weaver.AssemblyInfoInputs.cache
+d:\Desktop\Coding Projects\Networking\arcane-weaver\obj\Debug\weaver.AssemblyInfo.cs
+d:\Desktop\Coding Projects\Networking\arcane-weaver\obj\Debug\weaver.csproj.CoreCompileInputs.cache
+d:\Desktop\Coding Projects\Networking\arcane-weaver\obj\Debug\weaver.sourcelink.json
+D:\Desktop\Coding Projects\Networking\arcane-weaver\obj\Debug\weaver.csproj.Up2Date
+d:\Desktop\Coding Projects\Networking\arcane-weaver\obj\Debug\weaver.dll
+d:\Desktop\Coding Projects\Networking\arcane-weaver\obj\Debug\refint\weaver.dll
+d:\Desktop\Coding Projects\Networking\arcane-weaver\obj\Debug\weaver.pdb
+D:\Desktop\Coding Projects\Networking\arcane-weaver\obj\Debug\weaver.genruntimeconfig.cache
+D:\Desktop\Coding Projects\Networking\arcane-weaver\obj\Debug\ref\weaver.dll

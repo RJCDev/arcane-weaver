@@ -180,6 +180,8 @@ public static class Weaver
     /// </summary>
     static void InjectPackMethod(MethodDefinition rpc, MethodDefinition packMethod)
     {
+        var arrayLengthGetter = ModuleDefinition.ImportReference(typeof(Array).GetProperty("Length").GetMethod);
+
         bool isServerCommand = (bool)rpc.CustomAttributes
         .First(x => x.AttributeType.FullName == "ArcaneNetworking.MethodRPCAttribute")
         .ConstructorArguments[1].Value;
@@ -187,15 +189,25 @@ public static class Weaver
         var il = rpc.Body.GetILProcessor();
         var first = rpc.Body.Instructions.First();
 
-
         // Define (if) branch targets (Check if param 1 is null, uint[])
-        var skip = il.Create(OpCodes.Nop);
+        var nullSkip = il.Create(OpCodes.Nop);
+        var checkLength = il.Create(OpCodes.Nop);
 
         // Define condition
         il.InsertBefore(first, il.Create(OpCodes.Ldarg_1)); // connectionsToSendTo[]
         il.InsertBefore(first, il.Create(OpCodes.Ldnull));
-        il.InsertBefore(first, il.Create(OpCodes.Ceq)); // Check equal, 1 if equal
-        il.InsertBefore(first, il.Create(OpCodes.Brtrue, skip)); // Check if it is null, if true, skip!
+        il.InsertBefore(first, il.Create(OpCodes.Ceq)); // Check equal
+
+        il.InsertBefore(first, il.Create(OpCodes.Brtrue, nullSkip)); // Check if it is null, if true, skip!
+
+        // Now we check if equal to 1
+        il.InsertBefore(first, il.Create(OpCodes.Ldarg_1)); // connectionsToSendTo[]
+        il.InsertBefore(first, il.Create(OpCodes.Callvirt, arrayLengthGetter)); // Load count
+        il.InsertBefore(first, il.Create(OpCodes.Ldc_I4_0));
+        il.InsertBefore(first, il.Create(OpCodes.Ceq)); // Check equal
+
+        il.InsertBefore(first, il.Create(OpCodes.Brtrue, checkLength)); // Check if connsToSendTo.Count == 0, if true, skip!
+
 
         il.InsertBefore(first, il.Create(OpCodes.Ldarg_0)); // This (Networked Component)
 
@@ -209,8 +221,12 @@ public static class Weaver
         {
             il.InsertBefore(first, il.Create(OpCodes.Ret));
         }
-        // End of (if)
-        il.InsertBefore(first, skip);
+        // Before End Of if
+        il.InsertBefore(first, checkLength); 
+
+        // End of null check
+        il.InsertBefore(first, nullSkip);
+
  
   
 
