@@ -1,10 +1,10 @@
 {
   "version": 2,
-  "dgSpecHash": "C3OcZaAp4hA=",
+  "dgSpecHash": "mC4HcxX+ZtQ=",
   "success": true,
-  "projectFilePath": "D:\\Desktop\\Coding Projects\\Networking\\arcane-weaver\\weaver.csproj",
+  "projectFilePath": "D:\\arcane-weaver\\weaver.csproj",
   "expectedPackageFiles": [
-    "C:\\Users\\Ryan SSD\\.nuget\\packages\\mono.cecil\\0.11.6\\mono.cecil.0.11.6.nupkg.sha512"
+    "C:\\Users\\GamePlayer\\.nuget\\packages\\mono.cecil\\0.11.6\\mono.cecil.0.11.6.nupkg.sha512"
   ],
   "logs": []
 }

@@ -302,7 +302,6 @@ public class Relay
     internal static void InjectSendMethod(MethodDefinition rpc, MethodDefinition internalRPC, MethodDefinition packMethod)
     {
         var networkManagerType = Weaver.GetRef("ArcaneNetworking.NetworkManager");
-        var arrayLengthGetter = Weaver.Assembly.ImportReference(typeof(Array).GetProperty("Length").GetMethod);
 
         var amIServerField = Weaver.Assembly.ImportReference(
             networkManagerType.Resolve().Fields.First(f => f.Name == "AmIServer" && f.IsStatic)
@@ -311,46 +310,39 @@ public class Relay
            networkManagerType.Resolve().Fields.First(f => f.Name == "AmIClient" && f.IsStatic)
        );
 
-        bool runLocal = (bool)rpc.CustomAttributes
-        .First(x => x.AttributeType.FullName == "ArcaneNetworking.RelayAttribute")
-        .ConstructorArguments[1].Value;
-
         var il = rpc.Body.GetILProcessor();
         var first = rpc.Body.Instructions.First();
-        var checkServer = il.Create(OpCodes.Nop);
-        var checkClient = il.Create(OpCodes.Nop);
+
+        var checkClientEnd = il.Create(OpCodes.Nop);
+        var checkServerEnd = il.Create(OpCodes.Nop);
         var ret = il.Create(OpCodes.Ret);
 
-        if (runLocal) // Should we run locally on server?
-        {
-            // Check if we are client and run and return
-            il.InsertBefore(first, il.Create(OpCodes.Ldsfld, amIServerField)); // Check if we are client
-            il.InsertBefore(first, il.Create(OpCodes.Brfalse, checkServer)); // If we are just run the method
-
-            il.InsertBefore(first, il.Create(OpCodes.Ldarg_0)); // Load this (NetworkedComponent)
-            // Load rpc params
-            for (int i = 0; i < rpc.Parameters.Count; i++)
-            {
-                var param = rpc.Parameters[i];
-                il.InsertBefore(first, il.Create(OpCodes.Ldarg, i + 1)); // Load params
-            }
-            il.InsertBefore(first, il.Create(OpCodes.Callvirt, internalRPC)); // Call
-
-            il.InsertBefore(first, checkServer); // End of if
-        }
-
-        // ONLY RUN PACK AND SEND AS SERVER
+        // if (AmIClient) { internalRPC(...); return; }
         il.InsertBefore(first, il.Create(OpCodes.Ldsfld, amIClientField));
-        il.InsertBefore(first, il.Create(OpCodes.Brfalse, checkClient)); // We are not a sever, skip
+        il.InsertBefore(first, il.Create(OpCodes.Brfalse, checkClientEnd));
+        il.InsertBefore(first, il.Create(OpCodes.Ldarg_0));
 
-        il.InsertBefore(first, il.Create(OpCodes.Ldarg_0)); // This (Networked Component)
+        for (int i = 0; i < rpc.Parameters.Count; i++)
+            il.InsertBefore(first, il.Create(OpCodes.Ldarg, i + 1));
 
-        for (int i = 1; i < packMethod.Parameters.Count + 1; i++) // Load args from this method to pack method
-            il.InsertBefore(first, il.Create(OpCodes.Ldarg, i));
+        il.InsertBefore(first, il.Create(OpCodes.Callvirt, internalRPC));
+        il.InsertBefore(first, il.Create(OpCodes.Ret));
+        il.InsertBefore(first, checkClientEnd);
 
-        il.InsertBefore(first, il.Create(OpCodes.Callvirt, packMethod)); // Call the pack method
+        // else if (AmIServer) { packMethod(...); }
+        il.InsertBefore(first, il.Create(OpCodes.Ldsfld, amIServerField));
+        il.InsertBefore(first, il.Create(OpCodes.Brfalse, checkServerEnd));
+        il.InsertBefore(first, il.Create(OpCodes.Ldarg_0));
 
-        il.InsertBefore(first, checkClient); // End of if
+        for (int i = 0; i < rpc.Parameters.Count; i++)
+            il.InsertBefore(first, il.Create(OpCodes.Ldarg, i + 1));
+
+        il.InsertBefore(first, il.Create(OpCodes.Callvirt, packMethod));
+        il.InsertBefore(first, checkServerEnd);
+
+        // final return
+        il.InsertBefore(first, ret);
+
         
     }
 
