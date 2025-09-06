@@ -26,27 +26,32 @@ public static class Weaver
                 {
                     Assembly = ModuleDefinition.ReadModule(fs);
 
-                    foreach (var type in Assembly.Types.ToList().ToList())
+                    foreach (var component in Assembly.Types.ToList())
                     {
                         // Packet hashing
-                        if (type.Interfaces.Any(i => i.InterfaceType.FullName == "ArcaneNetworking.Packet"))
-                            InjectPacketHashRegister(type);
+                        if (component.Interfaces.Any(i => i.InterfaceType.FullName == "ArcaneNetworking.Packet"))
+                            InjectPacketHashRegister(component);
 
                         // RPC method weaving
-                        if (type.BaseType?.FullName == "ArcaneNetworking.NetworkedComponent")
+                        if (component.BaseType?.FullName == "ArcaneNetworking.NetworkedComponent")
                         {
-                            foreach (var originalRPC in type.Methods.ToList())
+                            foreach (var originalRPC in component.Methods.ToList())
                             {
                                 // // // // // COMMAND RPCS \\ \\ \\ \\ \\
                                 if (originalRPC.CustomAttributes.Any(a => a.AttributeType.Name == "CommandAttribute"))
                                 {
-                                    var commandUnpackInvoker = Command.GenerateUpackAndInvokeHandler(type, originalRPC);
-                                    var commandPackInvoker = Command.GeneratePackAndSendMethod(type, originalRPC, InjectMethodRPCHashRegister(commandUnpackInvoker));
+                                    // Compute a stable hash for this method
+                                    int hash = StableHash(originalRPC.FullName);
 
-                                    Command.InjectPackMethod(originalRPC, commandPackInvoker);
+                                    var commandInternal = Command.GenerateInternalCall(component, originalRPC); // The internal command that will get called on invokes
+                                    var commandSendMethod = Command.GenerateSendMethod(component, originalRPC, hash); // The send method that will send the params
+                                    Command.InjectSendMethod(originalRPC, commandInternal, commandSendMethod); // Injects the send method into the original rpc
+                                    var commandUnpackInvoker = Command.GenerateReceiverInvokeHandler(component, originalRPC, commandInternal); // The unpacker that will read the params
+
+                                    InjectMethodRPCHashRegister(commandUnpackInvoker, hash); // Injects add method to ArcaneNetworking static class to add this method invoker
 
                                     CecilDebug._createdMethods.Add(commandUnpackInvoker); // Debug
-                                    CecilDebug._createdMethods.Add(commandPackInvoker); // Debug
+                                    CecilDebug._createdMethods.Add(commandSendMethod); // Debug
 
                                     continue;
                                 }
@@ -54,10 +59,15 @@ public static class Weaver
                                 // // // // // RELAY RPCS \\ \\ \\ \\ \\
                                 if (originalRPC.CustomAttributes.Any(a => a.AttributeType.Name == "RelayAttribute"))
                                 {
-                                    var relayUnpackInvoker = Relay.GenerateUpackAndInvokeHandler(type, originalRPC);
-                                    var relayPackInvoker = Relay.GeneratePackAndSendMethod(type, originalRPC, InjectMethodRPCHashRegister(relayUnpackInvoker));
+                                    // Compute a stable hash for this method
+                                    int hash = StableHash(originalRPC.FullName);
 
-                                    Relay.InjectPackMethod(originalRPC, relayPackInvoker);
+                                    var relayInternal = Relay.GenerateInternalCall(component, originalRPC); // The internal command that will get called on invokes
+                                    var relayPackInvoker = Relay.GenerateSendMethod(component, originalRPC, hash); // The send method that will send the params
+                                    Relay.InjectSendMethod(originalRPC, relayInternal, relayPackInvoker); // Injects the send method into the original rpc
+                                    var relayUnpackInvoker = Relay.GenerateReceiverInvokerHandler(component, originalRPC, relayInternal); // The unpacker that will read the params
+
+                                    InjectMethodRPCHashRegister(relayUnpackInvoker, hash); // Injects add method to ArcaneNetworking static class to add this method invoker
 
                                     CecilDebug._createdMethods.Add(relayUnpackInvoker); // Debug
                                     CecilDebug._createdMethods.Add(relayPackInvoker); // Debug
@@ -151,11 +161,8 @@ public static class Weaver
     // <summary>
     /// Injects a register method in ArcaneNetworking static constructor that registers RPC method
     /// </summary>
-    static int InjectMethodRPCHashRegister(MethodDefinition unpackInvoke)
+    static void InjectMethodRPCHashRegister(MethodDefinition unpackInvoke, int hash)
     {
-        // Compute a stable hash for this method
-        int hash = StableHash(unpackInvoke.FullName);
-
         // Get ArcaneNetworking type and its static constructor
         var arcaneType = Assembly.Types.First(t => t.Name == "ArcaneNetworking");
         var cctor = arcaneType.GetStaticConstructor();
@@ -182,8 +189,6 @@ public static class Weaver
         il.InsertBefore(ret, il.Create(OpCodes.Ldftn, unpackInvoke));     // push method pointer
         il.InsertBefore(ret, il.Create(OpCodes.Newobj, delegateCtorRef)); // new RPCUnpackDelegate
         il.InsertBefore(ret, il.Create(OpCodes.Call, registerRef));       // call RegisterRPC(int, delegate)
-
-        return hash;
     }
 
    

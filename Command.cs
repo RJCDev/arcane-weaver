@@ -14,11 +14,37 @@ namespace ArcaneWeaver;
 
 public class Command
 {
+    /// <summary>
+    /// Moves the rpc method body to its own method so we can call it from the original
+    /// </summary>
+    /// <returns></returns>
+    internal static MethodDefinition GenerateInternalCall(TypeDefinition component, MethodDefinition rpc)
+    {
+        // Create internal method
+        var internalCall = new MethodDefinition(
+            "Internal_Command_" + rpc.Name,
+            MethodAttributes.Public,
+            Weaver.Assembly.TypeSystem.Void
+        );
+
+        // Add same params as original RPC
+        foreach (var p in rpc.Parameters)
+            internalCall.Parameters.Add(new ParameterDefinition(p.Name, ParameterAttributes.None, Weaver.Assembly.ImportReference(p.ParameterType)));
+
+        internalCall.Body = rpc.Body;
+        rpc.Body = new MethodBody(rpc);
+        rpc.Body.GetILProcessor().Emit(OpCodes.Ret);
+
+        // Add to component
+        component.Resolve().Methods.Add(internalCall);
+        return internalCall;
+
+    }
     // <summary>
     /// Generates a (Pack_MethodName()) that packs the arguments that are sent into an Relay RPC, as well as the packet type (RPC = 1),
     /// and the RPC data.
     /// </summary>
-    internal static MethodDefinition GeneratePackAndSendMethod(TypeDefinition component, MethodDefinition rpc, int methodHash)
+    internal static MethodDefinition GenerateSendMethod(TypeDefinition component, MethodDefinition rpc, int methodHash)
     {
 
         // Get From MethodRPC Attribute args
@@ -68,11 +94,11 @@ public class Command
         );
 
         // Retrieve single send enqueue method
-        var enqueueMethod =  messageHandlerType.Resolve().Methods.First(m => m.Name == "Enqueue" && m.Parameters.Count == 3);
+        var enqueueMethod = messageHandlerType.Resolve().Methods.First(m => m.Name == "Enqueue" && m.Parameters.Count == 3);
 
         // Create pack method
         var packMethod = new MethodDefinition(
-            "Pack_" + rpc.Name,
+            "Pack_Command_" + rpc.Name,
             MethodAttributes.Public,
             Weaver.Assembly.TypeSystem.Void
         );
@@ -90,7 +116,7 @@ public class Command
 
         // Writer orderflow:
         // rpcTypeByte -> methodHash -> callerNetID -> callerComponentIndex -> args (arbitrary)
-        
+
         // Load Writer object
         var writerVar = new VariableDefinition(writerType);
         packMethod.Body.Variables.Add(writerVar);
@@ -160,7 +186,7 @@ public class Command
     /// <summary>
     /// Generates a (Unpack_MethodName()) that unpacks the incoming data with a custom invoker that reads each argument
     /// </summary>
-    internal static MethodDefinition GenerateUpackAndInvokeHandler(TypeDefinition component, MethodDefinition rpc)
+    internal static MethodDefinition GenerateReceiverInvokeHandler(TypeDefinition component, MethodDefinition rpc, MethodDefinition internalrpc)
     {
         var arraySegByteType = Weaver.Assembly.ImportReference(typeof(byte[]));
 
@@ -179,7 +205,7 @@ public class Command
 
         // Method signature
         var unpackMethod = new MethodDefinition(
-            "Unpack_" + rpc.Name,
+            "Unpack_Command_" + rpc.Name,
             MethodAttributes.Public | MethodAttributes.Static,
             Weaver.Assembly.TypeSystem.Void);
 
@@ -229,8 +255,7 @@ public class Command
 
         // Callvirt on the concrete component:
         // ((<DeclaringType>)target).Rpc(paramLocals...)
-        var declaringCompType = Weaver.Assembly.ImportReference(rpc.DeclaringType);
-        var originalRPCRef = Weaver.Assembly.ImportReference(rpc); // instance method
+        var declaringCompType = Weaver.Assembly.ImportReference(internalrpc.DeclaringType);
 
         il.Emit(OpCodes.Ldarg_1); // target (NetworkedComponent)
         il.Emit(OpCodes.Castclass, declaringCompType); // cast to the concrete type
@@ -238,7 +263,7 @@ public class Command
         for (int i = 0; i < paramLocals.Count; i++) // Load to original rpc
             il.Emit(OpCodes.Ldloc, paramLocals[i]);
 
-        il.Emit(OpCodes.Callvirt, originalRPCRef);
+        il.Emit(OpCodes.Callvirt, internalrpc);
 
         il.Emit(OpCodes.Ret);
 
@@ -251,11 +276,14 @@ public class Command
     // <summary>
     /// Injects instructions behind an RPC method that are determined by the attribute applied above it
     /// </summary>
-    internal static void InjectPackMethod(MethodDefinition rpc, MethodDefinition packMethod)
+    internal static void InjectSendMethod(MethodDefinition rpc, MethodDefinition internalRPC, MethodDefinition packMethod)
     {
         var networkManagerType = Weaver.GetRef("ArcaneNetworking.NetworkManager");
         var arrayLengthGetter = Weaver.Assembly.ImportReference(typeof(Array).GetProperty("Length").GetMethod);
 
+        var amIServerField = Weaver.Assembly.ImportReference(
+            networkManagerType.Resolve().Fields.First(f => f.Name == "AmIServer" && f.IsStatic)
+        );
         var amIClientField = Weaver.Assembly.ImportReference(
             networkManagerType.Resolve().Fields.First(f => f.Name == "AmIClient" && f.IsStatic)
         );
@@ -266,7 +294,33 @@ public class Command
 
         var il = rpc.Body.GetILProcessor();
         var first = rpc.Body.Instructions.First();
-        var checkOwner = il.Create(OpCodes.Nop);
+        var checkClient = il.Create(OpCodes.Nop);
+        var checkServer = il.Create(OpCodes.Nop);
+        var ret = il.Create(OpCodes.Ret);
+
+                
+        // Check if we are server and run and return
+        il.InsertBefore(first, il.Create(OpCodes.Ldsfld, amIServerField)); // Check if we are server
+        il.InsertBefore(first, il.Create(OpCodes.Brfalse, checkServer)); // If we are just run the method
+
+        il.InsertBefore(first,il.Create(OpCodes.Ldarg_0)); // Load this (NetworkedComponent)
+        // Load rpc params
+        for (int i = 0; i < rpc.Parameters.Count; i++)
+        {
+            var param = rpc.Parameters[i];
+            il.InsertBefore(first, il.Create(OpCodes.Ldarg, i + 1)); // Load params
+        }
+
+        il.InsertBefore(first, il.Create(OpCodes.Callvirt, internalRPC)); // Call
+        il.InsertBefore(first, ret); // Return
+        il.Append(ret); // Appent the return
+
+        il.InsertBefore(first, checkServer); // End If
+              
+
+        // ONLY RUN PACK AND SEND AS CLIENT
+        il.InsertBefore(first, il.Create(OpCodes.Ldfld, amIClientField));
+        il.InsertBefore(first, il.Create(OpCodes.Brfalse, checkClient)); // Skip the pack block and just run if we are NOT client only
 
         il.InsertBefore(first, il.Create(OpCodes.Ldarg_0)); // This (Networked Component)
 
@@ -274,14 +328,9 @@ public class Command
             il.InsertBefore(first, il.Create(OpCodes.Ldarg, i));
 
         il.InsertBefore(first, il.Create(OpCodes.Callvirt, packMethod)); // Call the pack method
-        
-        // Never run locally
-        var ret = il.Create(OpCodes.Ret);
-        il.InsertBefore(first, il.Create(OpCodes.Ldsfld, amIClientField)); // Check if we are client
-        il.InsertBefore(first, il.Create(OpCodes.Brtrue, ret)); // We are the client, return
-        il.Append(ret);
 
-        
+        il.InsertBefore(first, checkClient); // End If
+
         
     }
 
