@@ -37,20 +37,19 @@ public static class Weaver
                         {
                             foreach (var originalRPC in type.Methods.ToList())
                             {
+                                // // // // // COMMAND RPCS \\ \\ \\ \\ \\
+                                if (originalRPC.CustomAttributes.Any(a => a.AttributeType.Name == "CommandAttribute"))
+                                {
+                                    var commandUnpackInvoker = Command.GenerateUpackAndInvokeHandler(type, originalRPC);
+                                    var commandPackInvoker = Command.GeneratePackAndSendMethod(type, originalRPC, InjectMethodRPCHashRegister(commandUnpackInvoker));
 
-                                // // // // // // COMMAND RPCS \\ \\ \\ \\ \\
-                                // if (originalRPC.CustomAttributes.Any(a => a.AttributeType.Name == "CommandRPCAttribute"))
-                                // {
-                                //     var commandUnpackInvoker = Command.GenerateUpackAndInvokeHandler(type, originalRPC);
-                                //     var commandPackInvoker = Command.GeneratePackAndSendMethod(type, originalRPC, InjectMethodRPCHashRegister(commandUnpackInvoker));
+                                    Command.InjectPackMethod(originalRPC, commandPackInvoker);
 
-                                //     Relay.InjectPackMethod(originalRPC, commandPackInvoker);
+                                    CecilDebug._createdMethods.Add(commandUnpackInvoker); // Debug
+                                    CecilDebug._createdMethods.Add(commandPackInvoker); // Debug
 
-                                //     CecilDebug._createdMethods.Add(commandUnpackInvoker); // Debug
-                                //     CecilDebug._createdMethods.Add(commandPackInvoker); // Debug
-
-                                //     continue;
-                                // }
+                                    continue;
+                                }
 
                                 // // // // // RELAY RPCS \\ \\ \\ \\ \\
                                 if (originalRPC.CustomAttributes.Any(a => a.AttributeType.Name == "RelayAttribute"))

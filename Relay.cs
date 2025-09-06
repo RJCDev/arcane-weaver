@@ -26,6 +26,7 @@ public class Relay
         var channelAttrib = rpcAttr.ConstructorArguments[0].Value;
 
         // Import TypeReferences
+        var serverType = Weaver.GetRef("ArcaneNetworking.Server");
         var messageHandlerType = Weaver.GetRef("ArcaneNetworking.MessageHandler");
         var netComponentType = Weaver.GetRef("ArcaneNetworking.NetworkedComponent");
         var netNodeType = Weaver.GetRef("ArcaneNetworking.NetworkedNode");
@@ -36,11 +37,17 @@ public class Relay
         var connectionType = Weaver.GetRef("ArcaneNetworking.NetworkConnection");
 
         // Do we have targets ? or just one (^1 is last element)
+        bool allTargets = false;
+        bool multiTarget = false;
+        bool singleTarget = false;
+        if (rpc.Parameters.Count > 0)
+        {
+            multiTarget = Weaver.Assembly.ImportReference(rpc.Parameters[^1].ParameterType).FullName == Weaver.Assembly.ImportReference(connectionType.MakeArrayType()).FullName;
+            singleTarget = rpc.Parameters[^1].ParameterType == connectionType;
+            allTargets = !multiTarget && !singleTarget;
+        }
+        else allTargets = true;
         
-        bool multiTarget = Weaver.Assembly.ImportReference(rpc.Parameters[^1].ParameterType).FullName == Weaver.Assembly.ImportReference(connectionType.MakeArrayType()).FullName;      
-        bool singleTarget = rpc.Parameters[^1].ParameterType == connectionType;
-
-        if (!multiTarget && !singleTarget) throw new Exception("[Weaver] Relay RPC didn't specify targets! " + rpc.FullName);
 
         // Get FieldReferences
         var netNodeField = Weaver.Assembly.ImportReference(
@@ -63,6 +70,9 @@ public class Relay
         );
         var poolGetWriterMethod = Weaver.Assembly.ImportReference(
             poolType.Resolve().Methods.First(m => m.Name == "GetWriter" && m.IsStatic && m.Parameters.Count == 0)
+        );
+        var getAllConnectionsMethod = Weaver.Assembly.ImportReference(
+            serverType.Resolve().Methods.First(m => m.Name == "GetAllConnections" && m.IsStatic && m.Parameters.Count == 0)
         );
 
         // Retrieve both enqueue methods
@@ -131,7 +141,7 @@ public class Relay
         il.Emit(OpCodes.Call, writeCompIndexGeneric); // Push Caller Indx
 
         // Write each arg with writer.Write<T>() (skip the last one, that is for the connections we are sending to)
-        for (int i = 0; i < packMethod.Parameters.Count - 1; i++)
+        for (int i = 0; i < packMethod.Parameters.Count; i++)
         {
             var param = packMethod.Parameters[i];
 
@@ -147,9 +157,19 @@ public class Relay
 
         il.Emit(OpCodes.Ldc_I4, channelVal); // Push Channels enum
         il.Emit(OpCodes.Ldloc, writerVar); // Push Writer
-        il.Emit(OpCodes.Ldarg, packMethod.Parameters.Count); // Push connections / connection array target param
 
-        il.Emit(OpCodes.Call, singleTarget ? enqueSingleMethod : enqueueManyMethod); // Call MessageHandler.Enqueue(Channels channel, NetworkWriter writer, params NetworkConnection[] connections)
+        if (allTargets) // Grab all NetworkConnection[] targets
+        {
+            il.Emit(OpCodes.Call, getAllConnectionsMethod); 
+        }
+        else // Grab the args
+        {
+            int lastArg = rpc.Parameters.Count - 1;
+            il.Emit(OpCodes.Ldarg, lastArg); 
+        }
+  
+        var methodToEnque = singleTarget ? enqueSingleMethod : enqueueManyMethod;
+        il.Emit(OpCodes.Call, methodToEnque); // Call MessageHandler.Enqueue(Channels channel, NetworkWriter writer, params NetworkConnection[] connections)
 
         il.Emit(OpCodes.Ret);
 
@@ -165,6 +185,7 @@ public class Relay
     {
         var arraySegByteType = Weaver.Assembly.ImportReference(typeof(byte[]));
 
+        var networkConnectionType = Weaver.GetRef("ArcaneNetworking.NetworkConnection");
         var ncType = Weaver.GetRef("ArcaneNetworking.NetworkedComponent");
         var readerType = Weaver.GetRef("ArcaneNetworking.NetworkReader");
         var poolType = Weaver.GetRef("ArcaneNetworking.NetworkPool"); ;
@@ -205,17 +226,23 @@ public class Relay
 
         // One local per RPC parameter
         var paramLocals = new List<VariableDefinition>(rpc.Parameters.Count);
-        foreach (var p in rpc.Parameters) // 0 is uint[] connectionsToSendTo
+        foreach (var p in rpc.Parameters)
         {
             // ensure type is imported into this module
             var pt = Weaver.Assembly.ImportReference(p.ParameterType);
             var v = new VariableDefinition(pt);
+
+            if ( // Make sure we don't read the connections array if there is one
+            Weaver.Assembly.ImportReference(p.ParameterType).FullName
+            == Weaver.Assembly.ImportReference(networkConnectionType.MakeArrayType()).FullName
+            ) continue;
+
             unpackMethod.Body.Variables.Add(v);
             paramLocals.Add(v);
         }
 
-        // For each param: local_i = reader.Read<Ti>() (Skip one to avoid the connectionIdsToSend uint[])
-        for (int i = 1; i < paramLocals.Count; i++)
+        // For each param: local_i = reader.Read<Ti>() 
+        for (int i = 0; i < paramLocals.Count; i++)
         {
             var ti = Weaver.Assembly.ImportReference(paramLocals[i].VariableType);
             var readTi = new GenericInstanceMethod(readGenericDef);
@@ -236,8 +263,7 @@ public class Relay
         il.Emit(OpCodes.Ldarg_1); // target (NetworkedComponent)
         il.Emit(OpCodes.Castclass, declaringCompType); // cast to the concrete type
 
-        il.Emit(OpCodes.Ldnull);
-        for (int i = 1; i < paramLocals.Count; i++) // Load to original rpc
+        for (int i = 0; i < paramLocals.Count; i++) // Load to original rpc
             il.Emit(OpCodes.Ldloc, paramLocals[i]);
 
         il.Emit(OpCodes.Callvirt, originalRPCRef);
@@ -255,7 +281,16 @@ public class Relay
     /// </summary>
     internal static void InjectPackMethod(MethodDefinition rpc, MethodDefinition packMethod)
     {
+        var networkManagerType = Weaver.GetRef("ArcaneNetworking.NetworkManager");
         var arrayLengthGetter = Weaver.Assembly.ImportReference(typeof(Array).GetProperty("Length").GetMethod);
+
+        var amIServerField = Weaver.Assembly.ImportReference(
+            networkManagerType.Resolve().Fields.First(f => f.Name == "AmIServer" && f.IsStatic)
+        );
+
+        var amICombo = Weaver.Assembly.ImportReference(
+            networkManagerType.Resolve().Properties.First(f => f.Name == "AmICombo").GetMethod
+        );
 
         bool runLocal = (bool)rpc.CustomAttributes
         .First(x => x.AttributeType.FullName == "ArcaneNetworking.RelayAttribute")
@@ -263,19 +298,28 @@ public class Relay
 
         var il = rpc.Body.GetILProcessor();
         var first = rpc.Body.Instructions.First();
+        var checkCombo = il.Create(OpCodes.Nop);
 
         il.InsertBefore(first, il.Create(OpCodes.Ldarg_0)); // This (Networked Component)
 
         for (int i = 1; i < rpc.Parameters.Count + 1; i++) // Load args from this method, original rpc method had one less paramter, so we can safely do Count + 1
             il.InsertBefore(first, il.Create(OpCodes.Ldarg, i));
 
+        il.InsertBefore(first, il.Create(OpCodes.Call, amICombo)); // Check if we are a Server + Client
+        il.InsertBefore(first, il.Create(OpCodes.Brtrue, checkCombo)); // We are combo, skip sending the data to the client
+
         il.InsertBefore(first, il.Create(OpCodes.Callvirt, packMethod)); // Call the pack method
 
-        // If we shouldn't run locally, return after the pack
+        il.InsertBefore(first, checkCombo); // Skip if combo
+
         if (!runLocal)
         {
-            il.InsertBefore(first, il.Create(OpCodes.Ret));
+            var ret = il.Create(OpCodes.Ret);
+            il.InsertBefore(first, il.Create(OpCodes.Ldsfld, amIServerField)); // Check if we are server
+            il.InsertBefore(first, il.Create(OpCodes.Brtrue, ret)); // We are the server, return
+            il.Append(ret);
         }
+        
     }
 
 }
