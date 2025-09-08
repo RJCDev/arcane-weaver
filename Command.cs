@@ -80,6 +80,9 @@ public class Command
         var messageLayerActiveField = Weaver.Assembly.ImportReference(
             messageLayerType.Resolve().Fields.First(f => f.Name == "Active")
         );
+        var sendTimeField = Weaver.Assembly.ImportReference(
+           netComponentType.Resolve().Fields.First(f => f.Name == "SendTime")
+        );
 
         // Get MethodReferences
         var getComponentIndexMethod = Weaver.Assembly.ImportReference(
@@ -94,7 +97,7 @@ public class Command
         );
 
         // Retrieve single send enqueue method
-        var enqueueMethod = messageHandlerType.Resolve().Methods.First(m => m.Name == "Enqueue" && m.Parameters.Count == 3);
+        var enqueueMethod = messageHandlerType.Resolve().Methods.First(m => m.Name == "Enqueue" && m.Parameters.Count == 4);
 
         // Create pack method
         var packMethod = new MethodDefinition(
@@ -171,6 +174,8 @@ public class Command
         int channelVal = (int)channelAttrib;
 
         il.Emit(OpCodes.Ldc_I4, channelVal); // Push Channels enum
+        il.Emit(OpCodes.Ldarg_0);  // Push this (NetworkedComponent)
+        il.Emit(OpCodes.Ldfld, sendTimeField);  // Push this sendTime from NetworkedComponent
         il.Emit(OpCodes.Ldloc, writerVar); // Push Writer
         il.Emit(OpCodes.Ldsfld, serverConnectionType); // Get server Connection
 

@@ -88,6 +88,9 @@ public class Relay
         var messageLayerActiveField = Weaver.Assembly.ImportReference(
             messageLayerType.Resolve().Fields.First(f => f.Name == "Active")
         );
+        var sendTimeField = Weaver.Assembly.ImportReference(
+           netComponentType.Resolve().Fields.First(f => f.Name == "SendTime")
+        );
 
         // Get MethodReferences
         var getComponentIndexMethod = Weaver.Assembly.ImportReference(
@@ -105,7 +108,7 @@ public class Relay
         );
 
         // Retrieve both enqueue methods
-        var enqueueMethods = messageHandlerType.Resolve().Methods.Where(m => m.Name == "Enqueue" && m.Parameters.Count == 3).ToArray();
+        var enqueueMethods = messageHandlerType.Resolve().Methods.Where(m => m.Name == "Enqueue" && m.Parameters.Count == 4).ToArray();
 
         var enqueSingleMethod = Weaver.Assembly.ImportReference(enqueueMethods[0].Resolve());
         var enqueueManyMethod = Weaver.Assembly.ImportReference(enqueueMethods[1].Resolve());
@@ -183,8 +186,10 @@ public class Relay
 
         // Load channel
         int channelVal = (int)channelAttrib;
-
+        
         il.Emit(OpCodes.Ldc_I4, channelVal); // Push Channels enum
+        il.Emit(OpCodes.Ldarg_0);  // Push this (NetworkedComponent)
+        il.Emit(OpCodes.Ldfld, sendTimeField);  // Push this sendTime from NetworkedComponent
         il.Emit(OpCodes.Ldloc, writerVar); // Push Writer
 
         if (allTargets) // Grab all NetworkConnection[] targets
@@ -303,12 +308,13 @@ public class Relay
     {
         var networkManagerType = Weaver.GetRef("ArcaneNetworking.NetworkManager");
 
+
         var amIServerField = Weaver.Assembly.ImportReference(
             networkManagerType.Resolve().Fields.First(f => f.Name == "AmIServer" && f.IsStatic)
         );
         var amIClientField = Weaver.Assembly.ImportReference(
            networkManagerType.Resolve().Fields.First(f => f.Name == "AmIClient" && f.IsStatic)
-       );
+        );
 
         var il = rpc.Body.GetILProcessor();
         var first = rpc.Body.Instructions.First();
@@ -326,7 +332,6 @@ public class Relay
             il.InsertBefore(first, il.Create(OpCodes.Ldarg, i + 1));
 
         il.InsertBefore(first, il.Create(OpCodes.Callvirt, internalRPC));
-        il.InsertBefore(first, il.Create(OpCodes.Ret));
         il.InsertBefore(first, checkClientEnd);
 
         // else if (AmIServer) { packMethod(...); }
