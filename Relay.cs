@@ -131,12 +131,7 @@ public class Relay
         var il = packMethod.Body.GetILProcessor(); // Start Method Processing
         packMethod.Body.InitLocals = true;
 
-        /////// WE ARE NOW WRITING TO THE NETWORK WRITER BUFFER /////////
-
-        // Writer orderflow:
-        // rpcTypeByte -> methodHash -> callerNetID -> callerComponentIndex -> args (arbitrary)
-
-        // Load Writer object
+         // Load Writer object
         var writerVar = new VariableDefinition(writerType);
         packMethod.Body.Variables.Add(writerVar);
 
@@ -174,6 +169,31 @@ public class Relay
         il.Emit(OpCodes.Call, getComponentIndexMethod);  // Call GetIndex() on the component
         il.Emit(OpCodes.Call, writeCompIndexGeneric); // Push Caller Indx
 
+        /////// WE ARE NOW WRITING TO THE NETWORK WRITER BUFFER /////////
+
+        // For (int i = 0; i < Server.GetAllConnections.Length(); i++)
+
+        var indexVar = new VariableDefinition(Weaver.Assembly.TypeSystem.Int32);
+        packMethod.Body.Variables.Add(indexVar);
+
+        Instruction loopCheck = il.Create(OpCodes.Nop);
+        Instruction loopBody = il.Create(OpCodes.Nop);
+        Instruction loopEnd  = il.Create(OpCodes.Nop);
+
+        // int i = 0
+        il.Emit(OpCodes.Ldc_I4_0);
+        il.Emit(OpCodes.Stloc, indexVar); // your i variable
+
+        // jump to condition check
+        il.Emit(OpCodes.Br, loopCheck);
+
+        // --- loop body ---
+        il.Append(loopBody);
+
+        
+        // Writer orderflow:
+        // rpcTypeByte -> methodHash -> callerNetID -> callerComponentIndex -> args (arbitrary)
+
         // Write each arg with writer.Write<T>() (skip the last one, that is for the connections we are sending to)
         for (int i = 0; i < packMethod.Parameters.Count; i++)
         {
@@ -186,47 +206,47 @@ public class Relay
             il.Emit(OpCodes.Callvirt, paramWriteGeneric);
         }
 
-
-        // For (int i = 0; i < Server.GetAllConnections.Length(); i++)
-
-        Instruction forLoop = il.Create(OpCodes.Nop);
-
-        il.Emit(OpCodes.Ldc_I4, 0); // Load 0 
-        il.Emit(OpCodes.Stloc_1); // Allocate an int with 0
-
-        // Start of for loop
-
-        il.Emit(OpCodes.Br_S, forLoop);
-        il.Emit(OpCodes.Nop);
-
-        if (allTargets) // Grab all NetworkConnection[] targets
-        {
+        // Load array
+        if (allTargets)
             il.Emit(OpCodes.Call, getAllConnectionsMethod);
-        }
-        else // Grab the args
-        {
-            int lastArg = rpc.Parameters.Count - 1;
-            il.Emit(OpCodes.Ldarg, lastArg);
-        }
+        else
+            il.Emit(OpCodes.Ldarg, rpc.Parameters.Count - 1);
+    
+        // Load i
+        il.Emit(OpCodes.Ldloc, indexVar);
+        il.Emit(OpCodes.Ldelem_Ref); // instead of arrayGetValueMethod
 
-        il.Emit(OpCodes.Ldloc_1); // Load index
-        il.Emit(OpCodes.Callvirt, arrayGetValueMethod); // Call get value at index 
+        // load writer + channel
+        il.Emit(OpCodes.Ldloc, writerVar);
+        il.Emit(OpCodes.Ldc_I4, (int)channelAttrib);
+        il.Emit(OpCodes.Callvirt, sendConnectionRawMethod);
 
-        //Load channel
-        int channelVal = (int)channelAttrib;
+        // i++
+        il.Emit(OpCodes.Ldloc, indexVar);
+        il.Emit(OpCodes.Ldc_I4_1);
+        il.Emit(OpCodes.Add);
+        il.Emit(OpCodes.Stloc, indexVar);
 
-        il.Emit(OpCodes.Ldloc, writerVar); // Load writer
-        il.Emit(OpCodes.Ldc_I4, channelVal); // Load Channels enum
-        il.Emit(OpCodes.Callvirt, sendConnectionRawMethod); // Call sendRaw 
-        
-        il.Emit(OpCodes.Ldloc_1); // Load int
-        il.Emit(OpCodes.Ldc_I4_1); // Load 1
-        il.Emit(OpCodes.Add); // Add
-        il.Emit(OpCodes.Stloc_1); // i += 1
+        // --- loop check ---
+        il.Append(loopCheck);
 
-        il.Emit(OpCodes.Ldloc_1); // Load int
-        il.Emit(OpCodes.Callvirt, arrayLengthProp); // Get length
-        il.Emit(OpCodes.Blt_S, forLoop); // Check if int is less than length and go to Br_s if it is
+        // Load i
+        il.Emit(OpCodes.Ldloc, indexVar);
+
+        // Load array.Length
+        if (allTargets)
+            il.Emit(OpCodes.Call, getAllConnectionsMethod);
+        else
+            il.Emit(OpCodes.Ldarg, rpc.Parameters.Count - 1);
+
+        il.Emit(OpCodes.Ldlen);         // get array length
+        il.Emit(OpCodes.Conv_I4);       // convert native int -> int32
+
+        // if (i < array.Length) goto loopBody
+        il.Emit(OpCodes.Blt, loopBody);
+
+        // --- loop end ---
+        il.Append(loopEnd);
 
         il.Emit(OpCodes.Ret);
 

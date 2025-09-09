@@ -92,6 +92,10 @@ public class Command
             poolType.Resolve().Methods.First(m => m.Name == "GetWriter" && m.IsStatic && m.Parameters.Count == 0)
         );
 
+        var sendConnectionRawMethod = Weaver.Assembly.ImportReference(
+            connectionType.Resolve().Methods.First(m => m.Name == "SendRaw" && m.Parameters.Count == 2)
+        );
+
 
         // Create pack method
         var packMethod = new MethodDefinition(
@@ -164,14 +168,13 @@ public class Command
             il.Emit(OpCodes.Callvirt, paramWriteGeneric);
         }
 
-        // Load channel
-        int channelVal = (int)channelAttrib;
+        // Load server connection
+        il.Emit(OpCodes.Ldsfld, serverConnectionType);
 
-        // il.Emit(OpCodes.Ldc_I4, channelVal); // Push Channels enum
-        // il.Emit(OpCodes.Ldloc, writerVar); // Push Writer
-        // il.Emit(OpCodes.Ldsfld, serverConnectionType); // Get server Connection
-
-        //il.Emit(OpCodes.Call, enqueueMethod); // Call MessageHandler.Enqueue(Channels channel, NetworkWriter writer, NetworkConnectionconnection)
+        // load writer + channel
+        il.Emit(OpCodes.Ldloc, writerVar);
+        il.Emit(OpCodes.Ldc_I4, (int)channelAttrib);
+        il.Emit(OpCodes.Callvirt, sendConnectionRawMethod);
 
         il.Emit(OpCodes.Ret);
 
