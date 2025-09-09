@@ -54,9 +54,10 @@ public class Relay
         var rpcAttr = rpc.CustomAttributes.First(x => x.AttributeType.FullName == "ArcaneNetworking.RelayAttribute");
         var channelAttrib = rpcAttr.ConstructorArguments[0].Value;
 
+        var arrayType = Weaver.Assembly.ImportReference(typeof(Array));
+
         // Import TypeReferences
         var serverType = Weaver.GetRef("ArcaneNetworking.Server");
-        var messageHandlerType = Weaver.GetRef("ArcaneNetworking.MessageHandler");
         var netComponentType = Weaver.GetRef("ArcaneNetworking.NetworkedComponent");
         var netNodeType = Weaver.GetRef("ArcaneNetworking.NetworkedNode");
         var writerType = Weaver.GetRef("ArcaneNetworking.NetworkWriter");
@@ -88,9 +89,6 @@ public class Relay
         var messageLayerActiveField = Weaver.Assembly.ImportReference(
             messageLayerType.Resolve().Fields.First(f => f.Name == "Active")
         );
-        var sendTimeField = Weaver.Assembly.ImportReference(
-           netComponentType.Resolve().Fields.First(f => f.Name == "SendTime")
-        );
 
         // Get MethodReferences
         var getComponentIndexMethod = Weaver.Assembly.ImportReference(
@@ -106,12 +104,16 @@ public class Relay
         var getAllConnectionsMethod = Weaver.Assembly.ImportReference(
             serverType.Resolve().Methods.First(m => m.Name == "GetAllConnections" && m.IsStatic && m.Parameters.Count == 0)
         );
+        var sendConnectionRawMethod = Weaver.Assembly.ImportReference(
+            connectionType.Resolve().Methods.First(m => m.Name == "SendRaw" && m.Parameters.Count == 2)
+        );
 
-        // Retrieve both enqueue methods
-        var enqueueMethods = messageHandlerType.Resolve().Methods.Where(m => m.Name == "Enqueue" && m.Parameters.Count == 4).ToArray();
-
-        var enqueSingleMethod = Weaver.Assembly.ImportReference(enqueueMethods[0].Resolve());
-        var enqueueManyMethod = Weaver.Assembly.ImportReference(enqueueMethods[1].Resolve());
+        var arrayLengthProp = Weaver.Assembly.ImportReference(
+            arrayType.Resolve().Properties.First(m => m.Name == "Length").GetMethod
+        );
+        var arrayGetValueMethod = Weaver.Assembly.ImportReference(
+            arrayType.Resolve().Methods.First(m => m.Name == "GetValue" && m.Parameters.Count == 1)
+        );
 
         // Create pack method
         var packMethod = new MethodDefinition(
@@ -184,13 +186,18 @@ public class Relay
             il.Emit(OpCodes.Callvirt, paramWriteGeneric);
         }
 
-        // Load channel
-        int channelVal = (int)channelAttrib;
-        
-        il.Emit(OpCodes.Ldc_I4, channelVal); // Push Channels enum
-        il.Emit(OpCodes.Ldarg_0);  // Push this (NetworkedComponent)
-        il.Emit(OpCodes.Ldfld, sendTimeField);  // Push this sendTime from NetworkedComponent
-        il.Emit(OpCodes.Ldloc, writerVar); // Push Writer
+
+        // For (int i = 0; i < Server.GetAllConnections.Length(); i++)
+
+        Instruction forLoop = il.Create(OpCodes.Nop);
+
+        il.Emit(OpCodes.Ldc_I4, 0); // Load 0 
+        il.Emit(OpCodes.Stloc_1); // Allocate an int with 0
+
+        // Start of for loop
+
+        il.Emit(OpCodes.Br_S, forLoop);
+        il.Emit(OpCodes.Nop);
 
         if (allTargets) // Grab all NetworkConnection[] targets
         {
@@ -202,8 +209,24 @@ public class Relay
             il.Emit(OpCodes.Ldarg, lastArg);
         }
 
-        var methodToEnque = singleTarget ? enqueSingleMethod : enqueueManyMethod;
-        il.Emit(OpCodes.Call, methodToEnque); // Call MessageHandler.Enqueue(Channels channel, NetworkWriter writer, params NetworkConnection[] connections)
+        il.Emit(OpCodes.Ldloc_1); // Load index
+        il.Emit(OpCodes.Callvirt, arrayGetValueMethod); // Call get value at index 
+
+        //Load channel
+        int channelVal = (int)channelAttrib;
+
+        il.Emit(OpCodes.Ldloc, writerVar); // Load writer
+        il.Emit(OpCodes.Ldc_I4, channelVal); // Load Channels enum
+        il.Emit(OpCodes.Callvirt, sendConnectionRawMethod); // Call sendRaw 
+        
+        il.Emit(OpCodes.Ldloc_1); // Load int
+        il.Emit(OpCodes.Ldc_I4_1); // Load 1
+        il.Emit(OpCodes.Add); // Add
+        il.Emit(OpCodes.Stloc_1); // i += 1
+
+        il.Emit(OpCodes.Ldloc_1); // Load int
+        il.Emit(OpCodes.Callvirt, arrayLengthProp); // Get length
+        il.Emit(OpCodes.Blt_S, forLoop); // Check if int is less than length and go to Br_s if it is
 
         il.Emit(OpCodes.Ret);
 
