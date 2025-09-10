@@ -78,7 +78,13 @@ public static class Weaver
                         }
                     }
 
-                    Assembly.Write(fs);
+                    Assembly.Write(fs, new WriterParameters()
+                    {
+                        WriteSymbols = true,
+
+                        SymbolWriterProvider = new PortablePdbWriterProvider()
+                    } );
+                    
                     Assembly.Dispose();
                 }
 

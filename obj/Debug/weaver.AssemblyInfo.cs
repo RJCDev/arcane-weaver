@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("weaver")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+01ef44cfc1b59689fe08c4439e2a843b02951180")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d3e7ba16de6956d9c57348c578b9395ccfdfda96")]
 [assembly: System.Reflection.AssemblyProductAttribute("weaver")]
 [assembly: System.Reflection.AssemblyTitleAttribute("weaver")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

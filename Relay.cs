@@ -131,6 +131,28 @@ public class Relay
         var il = packMethod.Body.GetILProcessor(); // Start Method Processing
         packMethod.Body.InitLocals = true;
 
+        /////// WE ARE NOW WRITING TO THE NETWORK WRITER BUFFER /////////
+
+        // For (int i = 0; i < Server.GetAllConnections.Length(); i++)
+
+        var indexVar = new VariableDefinition(Weaver.Assembly.TypeSystem.Int32);
+        packMethod.Body.Variables.Add(indexVar);
+
+        Instruction loopCheck = il.Create(OpCodes.Nop);
+        Instruction loopBody = il.Create(OpCodes.Nop);
+        Instruction loopEnd  = il.Create(OpCodes.Nop);
+
+        // int i = 0
+        il.Emit(OpCodes.Ldc_I4_0);
+        il.Emit(OpCodes.Stloc, indexVar); // your i variable
+
+        // jump to condition check
+        il.Emit(OpCodes.Br, loopCheck);
+
+        // --- loop body ---
+        il.Append(loopBody);
+
+        
          // Load Writer object
         var writerVar = new VariableDefinition(writerType);
         packMethod.Body.Variables.Add(writerVar);
@@ -169,31 +191,6 @@ public class Relay
         il.Emit(OpCodes.Call, getComponentIndexMethod);  // Call GetIndex() on the component
         il.Emit(OpCodes.Call, writeCompIndexGeneric); // Push Caller Indx
 
-        /////// WE ARE NOW WRITING TO THE NETWORK WRITER BUFFER /////////
-
-        // For (int i = 0; i < Server.GetAllConnections.Length(); i++)
-
-        var indexVar = new VariableDefinition(Weaver.Assembly.TypeSystem.Int32);
-        packMethod.Body.Variables.Add(indexVar);
-
-        Instruction loopCheck = il.Create(OpCodes.Nop);
-        Instruction loopBody = il.Create(OpCodes.Nop);
-        Instruction loopEnd  = il.Create(OpCodes.Nop);
-
-        // int i = 0
-        il.Emit(OpCodes.Ldc_I4_0);
-        il.Emit(OpCodes.Stloc, indexVar); // your i variable
-
-        // jump to condition check
-        il.Emit(OpCodes.Br, loopCheck);
-
-        // --- loop body ---
-        il.Append(loopBody);
-
-        
-        // Writer orderflow:
-        // rpcTypeByte -> methodHash -> callerNetID -> callerComponentIndex -> args (arbitrary)
-
         // Write each arg with writer.Write<T>() (skip the last one, that is for the connections we are sending to)
         for (int i = 0; i < packMethod.Parameters.Count; i++)
         {
@@ -206,12 +203,17 @@ public class Relay
             il.Emit(OpCodes.Callvirt, paramWriteGeneric);
         }
 
+
+        // Writer orderflow:
+        // rpcTypeByte -> methodHash -> callerNetID -> callerComponentIndex -> args (arbitrary)
+
         // Load array
         if (allTargets)
             il.Emit(OpCodes.Call, getAllConnectionsMethod);
         else
             il.Emit(OpCodes.Ldarg, rpc.Parameters.Count - 1);
     
+
         // Load i
         il.Emit(OpCodes.Ldloc, indexVar);
         il.Emit(OpCodes.Ldelem_Ref); // instead of arrayGetValueMethod
