@@ -357,29 +357,14 @@ public class Relay
         var amIServerField = Weaver.Assembly.ImportReference(
             networkManagerType.Resolve().Fields.First(f => f.Name == "AmIServer" && f.IsStatic)
         );
-        var amIClientField = Weaver.Assembly.ImportReference(
-           networkManagerType.Resolve().Fields.First(f => f.Name == "AmIClient" && f.IsStatic)
-        );
 
         var il = rpc.Body.GetILProcessor();
         var first = rpc.Body.Instructions.First();
 
-        var checkClientEnd = il.Create(OpCodes.Nop);
         var checkServerEnd = il.Create(OpCodes.Nop);
         var ret = il.Create(OpCodes.Ret);
 
-        // if (AmIClient) { internalRPC(...); return; }
-        il.InsertBefore(first, il.Create(OpCodes.Ldsfld, amIClientField));
-        il.InsertBefore(first, il.Create(OpCodes.Brfalse, checkClientEnd));
-        il.InsertBefore(first, il.Create(OpCodes.Ldarg_0));
-
-        for (int i = 0; i < rpc.Parameters.Count; i++)
-            il.InsertBefore(first, il.Create(OpCodes.Ldarg, i + 1));
-
-        il.InsertBefore(first, il.Create(OpCodes.Callvirt, internalRPC));
-        il.InsertBefore(first, checkClientEnd);
-
-        // else if (AmIServer) { packMethod(...); }
+        //  if (AmIServer) { packMethod(...); }
         il.InsertBefore(first, il.Create(OpCodes.Ldsfld, amIServerField));
         il.InsertBefore(first, il.Create(OpCodes.Brfalse, checkServerEnd));
         il.InsertBefore(first, il.Create(OpCodes.Ldarg_0));
