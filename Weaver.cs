@@ -24,7 +24,8 @@ public static class Weaver
                 // Open temp DLL for read/write
                 using (var fs = new FileStream(targetPath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
                 {
-                    Assembly = ModuleDefinition.ReadModule(fs);
+                    var readerParams = new ReaderParameters { ReadSymbols = true };
+                    Assembly = ModuleDefinition.ReadModule(fs, readerParams);
 
                     foreach (var component in Assembly.Types.ToList())
                     {
