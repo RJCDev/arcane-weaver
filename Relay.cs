@@ -20,19 +20,27 @@ public class Relay
     /// <returns></returns>
     internal static MethodDefinition GenerateInternalCall(TypeDefinition component, MethodDefinition rpc)
     {
+        var netConnType = Weaver.GetRef("ArcaneNetworking.NetworkConnection");
+
         // Create internal method
         var internalCall = new MethodDefinition(
-            "Internal_Command_" + rpc.Name,
+            "Internal_Relay_" + rpc.Name,
             MethodAttributes.Public,
             Weaver.Assembly.TypeSystem.Void
         );
 
-        // Add same params as original RPC
-        foreach (var p in rpc.Parameters)
-            internalCall.Parameters.Add(new ParameterDefinition(p.Name, ParameterAttributes.None, Weaver.Assembly.ImportReference(p.ParameterType)));
+        var rpcParams = rpc.Parameters.ToList();
 
-        var ilSource = rpc.Body.Instructions;
-        var ilTarget = internalCall.Body.Instructions;
+        // Check if we have targets
+        if (rpcParams.Count > 0)
+        {
+            if (rpcParams.Last().ParameterType.FullName == netConnType.FullName || rpcParams.Last().ParameterType.FullName == netConnType.MakeArrayType().FullName)
+                rpcParams.RemoveAt(rpcParams.Count - 1); // Remove last if we had targets
+        }
+
+        // Add same params as original RPC minus targets if needed
+        foreach (var p in rpcParams)
+            internalCall.Parameters.Add(new ParameterDefinition(p.Name, ParameterAttributes.None, Weaver.Assembly.ImportReference(p.ParameterType)));
 
         internalCall.Body = rpc.Body;
         rpc.Body = new MethodBody(rpc);
@@ -77,6 +85,8 @@ public class Relay
             allTargets = !multiTarget && !singleTarget;
         }
         else allTargets = true;
+
+        Console.WriteLine("All Targets? " + rpc.FullName + " | " + allTargets);
 
 
         // Get FieldReferences
@@ -192,7 +202,7 @@ public class Relay
         il.Emit(OpCodes.Call, writeCompIndexGeneric); // Push Caller Indx
 
         // Write each arg with writer.Write<T>() (skip the last one, that is for the connections we are sending to)
-        for (int i = 0; i < packMethod.Parameters.Count; i++)
+        for (int i = 0; i < (allTargets ? packMethod.Parameters.Count : packMethod.Parameters.Count - 1); i++)
         {
             var param = packMethod.Parameters[i];
 
@@ -203,7 +213,6 @@ public class Relay
             il.Emit(OpCodes.Callvirt, paramWriteGeneric);
         }
 
-
         // Writer orderflow:
         // rpcTypeByte -> methodHash -> callerNetID -> callerComponentIndex -> args (arbitrary)
 
@@ -211,7 +220,7 @@ public class Relay
         if (allTargets)
             il.Emit(OpCodes.Call, getAllConnectionsMethod);
         else
-            il.Emit(OpCodes.Ldarg, rpc.Parameters.Count - 1);
+            il.Emit(OpCodes.Ldarg, packMethod.Parameters.Count);
     
 
         // Load i
@@ -239,7 +248,7 @@ public class Relay
         if (allTargets)
             il.Emit(OpCodes.Call, getAllConnectionsMethod);
         else
-            il.Emit(OpCodes.Ldarg, rpc.Parameters.Count - 1);
+            il.Emit(OpCodes.Ldarg, rpc.Parameters.Count);
 
         il.Emit(OpCodes.Ldlen);         // get array length
         il.Emit(OpCodes.Conv_I4);       // convert native int -> int32
@@ -262,12 +271,15 @@ public class Relay
     /// </summary>
     internal static MethodDefinition GenerateReceiverInvokerHandler(TypeDefinition component, MethodDefinition rpc, MethodDefinition internalrpc)
     {
+        bool hadTargets = false;
+
         var arraySegByteType = Weaver.Assembly.ImportReference(typeof(byte[]));
 
+        var netConnType = Weaver.GetRef("ArcaneNetworking.NetworkConnection");
         var ncType = Weaver.GetRef("ArcaneNetworking.NetworkedComponent");
         var readerType = Weaver.GetRef("ArcaneNetworking.NetworkReader");
         var poolType = Weaver.GetRef("ArcaneNetworking.NetworkPool"); ;
-
+ 
         // NetworkReader.Read<T>(out T read, Type concreteType = default)
         var readGenericDef = Weaver.Assembly.ImportReference(
             readerType.Resolve().Methods.First(m =>
@@ -301,13 +313,23 @@ public class Relay
         // load reader from method
         il.Emit(OpCodes.Ldarg_0);
         il.Emit(OpCodes.Stloc, readerVar);
-
+        
         // One local per RPC parameter
-        var paramLocals = new List<VariableDefinition>(rpc.Parameters.Count);
-        foreach (var p in rpc.Parameters)
+        var rpcParams = rpc.Parameters.ToList();
+
+        if (rpcParams.Count > 0)
+        {
+            if (rpcParams.Last().ParameterType.FullName == netConnType.FullName || rpcParams.Last().ParameterType.FullName == netConnType.MakeArrayType().FullName)
+                rpcParams.RemoveAt(rpcParams.Count - 1); // Remove last if we had targets
+        }
+
+        var paramLocals = new List<VariableDefinition>(rpcParams.Count);
+
+        foreach (var p in rpcParams)
         {
             // ensure type is imported into this module
             var pt = Weaver.Assembly.ImportReference(p.ParameterType);
+
             var v = new VariableDefinition(pt);
             unpackMethod.Body.Variables.Add(v);
             paramLocals.Add(v);
