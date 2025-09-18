@@ -24,7 +24,7 @@ public static class Weaver
                 // Open temp DLL for read/write
                 using (var fs = new FileStream(targetPath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
                 {
-                    var readerParams = new ReaderParameters { ReadSymbols = true };
+                    var readerParams = new ReaderParameters { ReadSymbols = true, SymbolReaderProvider = new PortablePdbReaderProvider() };
                     Assembly = ModuleDefinition.ReadModule(fs, readerParams);
 
                     foreach (var component in Assembly.Types.ToList())
