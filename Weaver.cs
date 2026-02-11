@@ -2,6 +2,7 @@
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Threading.Tasks.Dataflow;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
@@ -34,7 +35,7 @@ public static class Weaver
                             InjectPacketHashRegister(component);
 
                         // RPC method weaving
-                        if (component.BaseType?.FullName == "ArcaneNetworking.NetworkedComponent")
+                        if (IsNetComponent(component))
                         {
                             foreach (var originalRPC in component.Methods.ToList())
                             {
@@ -198,6 +199,28 @@ public static class Weaver
         il.InsertBefore(ret, il.Create(OpCodes.Call, registerRef));       // call RegisterRPC(int, delegate)
     }
 
-   
+    static bool IsNetComponent(TypeDefinition type)
+    {
+        while (type != null)
+        {
+            if (type.FullName == "ArcaneNetworking.NetworkedComponent")
+                return true;
+
+            if (type.BaseType == null)
+                return false;
+
+            try
+            {
+                type = type.BaseType.Resolve();
+            }
+            catch
+            {
+                return false; // If we can't resolve the base type
+            }
+            
+        }
+
+        return false;
+    }
 
 }

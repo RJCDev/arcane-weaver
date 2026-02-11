@@ -175,7 +175,7 @@ public class Command
         // load writer + channel
         il.Emit(OpCodes.Ldloc, writerVar);
         il.Emit(OpCodes.Ldc_I4, (int)channelAttrib);
-        il.Emit(OpCodes.Ldc_I4, (bool)instant ? 1 : 0);
+        il.Emit((bool)instant ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
         il.Emit(OpCodes.Callvirt, sendConnectionRawMethod);
 
         il.Emit(OpCodes.Ret);
