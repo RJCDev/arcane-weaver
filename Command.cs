@@ -50,6 +50,7 @@ public class Command
         // Get From MethodRPC Attribute args
         var rpcAttr = rpc.CustomAttributes.First(x => x.AttributeType.FullName == "ArcaneNetworking.CommandAttribute");
         var channelAttrib = rpcAttr.ConstructorArguments[0].Value;
+        var instant = rpcAttr.ConstructorArguments[1].Value;
 
         // Import TypeReferences
         var clientType = Weaver.GetRef("ArcaneNetworking.Client");
@@ -93,7 +94,7 @@ public class Command
         );
 
         var sendConnectionRawMethod = Weaver.Assembly.ImportReference(
-            connectionType.Resolve().Methods.First(m => m.Name == "SendRaw" && m.Parameters.Count == 2)
+            connectionType.Resolve().Methods.First(m => m.Name == "SendRaw" && m.Parameters.Count == 3)
         );
 
 
@@ -174,6 +175,7 @@ public class Command
         // load writer + channel
         il.Emit(OpCodes.Ldloc, writerVar);
         il.Emit(OpCodes.Ldc_I4, (int)channelAttrib);
+        il.Emit(OpCodes.Ldc_I4, (bool)instant ? 1 : 0);
         il.Emit(OpCodes.Callvirt, sendConnectionRawMethod);
 
         il.Emit(OpCodes.Ret);

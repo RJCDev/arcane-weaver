@@ -61,6 +61,7 @@ public class Relay
         // Get From MethodRPC Attribute args
         var rpcAttr = rpc.CustomAttributes.First(x => x.AttributeType.FullName == "ArcaneNetworking.RelayAttribute");
         var channelAttrib = rpcAttr.ConstructorArguments[0].Value;
+        var instant = rpcAttr.ConstructorArguments[1].Value;
 
         var arrayType = Weaver.Assembly.ImportReference(typeof(Array));
 
@@ -115,7 +116,7 @@ public class Relay
             serverType.Resolve().Methods.First(m => m.Name == "GetAllConnections" && m.IsStatic && m.Parameters.Count == 0)
         );
         var sendConnectionRawMethod = Weaver.Assembly.ImportReference(
-            connectionType.Resolve().Methods.First(m => m.Name == "SendRaw" && m.Parameters.Count == 2)
+            connectionType.Resolve().Methods.First(m => m.Name == "SendRaw" && m.Parameters.Count == 3)
         );
 
         var arrayLengthProp = Weaver.Assembly.ImportReference(
@@ -230,6 +231,7 @@ public class Relay
         // load writer + channel
         il.Emit(OpCodes.Ldloc, writerVar);
         il.Emit(OpCodes.Ldc_I4, (int)channelAttrib);
+        il.Emit(OpCodes.Ldc_I4, (bool)instant ? 1 : 0);
         il.Emit(OpCodes.Callvirt, sendConnectionRawMethod);
 
         // i++
